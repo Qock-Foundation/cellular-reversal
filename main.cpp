@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <iostream>
 #include <mutex>
@@ -12,6 +13,8 @@ const int kCACntCellTypes = 7;
 //const int kCAIOi0 = 2, kCAIOj0 = 1, kCAIOlen = 4;
 const int N = 15, M = 15, H = 49, V = H * N * M, A = N * M;
 const int kCAIOi0 = 7, kCAIOj0 = 5, kCAIOlen = 7;
+
+std::atomic<int64_t> aTotalDiffScore, aTotalVolumeScore, aTotalBorderScore, aTotalSubstringsScore;
 
 class field {  // N * M
   uint8_t arr[N][M];
@@ -90,6 +93,7 @@ class creature {  // 3D CA
   }
   static int rotated_substrings_presence_heuristics(const uint8_t arr[H][N][M], const uint8_t str[kCAIOlen]) {
     int score = 0;
+    int direct[kCAIOlen+1] = {}, perpendicular[kCAIOlen+1] = {}, reversed[kCAIOlen+1] = {};
     for (int t = 0; t < H; ++t) {
       for (int i = 0; i < N; ++i) {
         for (int j = 0; j < M; ++j) {
@@ -98,25 +102,36 @@ class creature {  // 3D CA
             for (int u = 0; j + u < M && offset + u < kCAIOlen && arr[t][i][j+u] == str[offset+u]; ++u) {  // matching rightwards
               len++;
             }
-            score += len <= 1 ? 0 : len == 2 ? 1 : len == 3 ? 3 : len == 4 ? 6 : len == 5 ? 10 : 20;
+            direct[len]++;
             len = 0;
             for (int u = 0; i - u >= 0 && offset + u < kCAIOlen && arr[t][i-u][j] == str[offset+u]; ++u) {  // matching upwards
               len++;
             }
-            score += len <= 1 ? 0 : len == 2 ? 2 : len == 3 ? 6 : len == 4 ? 15 : len == 5 ? 30 : 50;
+            perpendicular[len]++;
             len = 0;
             for (int u = 0; i + u < N && offset + u < kCAIOlen && arr[t][i+u][j] == str[offset+u]; ++u) {  // matching downwards
               len++;
             }
-            score += len <= 1 ? 0 : len == 2 ? 2 : len == 3 ? 6 : len == 4 ? 15 : len == 5 ? 30 : 50;
+            perpendicular[len]++;
             len = 0;
             for (int u = 0; j - u >= 0 && offset + u < kCAIOlen && arr[t][i][j-u] == str[offset+u]; ++u) {  // matching leftwards!
               len++;
             }
-            score += len <= 1 ? 0 : len == 2 ? 2 : len == 3 ? 10 : len == 4 ? 35 : len == 5 ? 70 : 200;
+            reversed[len]++;
           }
         }
       }
+    }
+    for (int len = 3; len <= kCAIOlen; ++len) {
+      score += direct[len] <= H * kCAIOlen / len ?
+          (len <= 1 ? 0 : len == 2 ? 1 : len == 3 ? 3 : len == 4 ? 6 : len == 5 ? 10 : 20) * std::min(H / 3 * kCAIOlen / len, direct[len])
+          : -direct[len] * direct[len] / H / H * 5;
+      score += perpendicular[len] <= 1.5 * H * kCAIOlen / len ?
+          (len <= 1 ? 0 : len == 2 ? 2 : len == 3 ? 6 : len == 4 ? 15 : len == 5 ? 30 : 50) * std::min(H / 3 * kCAIOlen / len, perpendicular[len])
+          : -perpendicular[len] * perpendicular[len] / H / H * 3;
+      score += reversed[len] <= 2 * H * kCAIOlen / len ?
+          (len <= 1 ? 0 : len == 2 ? 2 : len == 3 ? 10 : len == 4 ? 35 : len == 5 ? 80 : 200) * std::min(H / 3 * kCAIOlen / len, reversed[len])
+          : -reversed[len] * reversed[len] / H / H;
     }
     return score;
   }
@@ -230,6 +245,7 @@ public:
     return 0;
   }
   int64_t score(int trials, std::mt19937& generator) {  // samples situations, estimates the creature
+    aTotalDiffScore += 1;
     int64_t score = 0;
     for (int situation = 0; situation < trials; ++situation) {
       field F;
@@ -262,15 +278,27 @@ public:
       }
       int diff = levenstein(s, t);
       static const int kCADiffLoss = 10;
-      score -= kCADiffLoss * diff;
-      static const double kCAFracVolume = 0.14;
-      static const int kCAVolumeLoss = 100;
-      score -= ((double)cnt_nonzero_cells_in_the_run / V - kCAFracVolume) / kCAFracVolume
-          * ((double)cnt_nonzero_cells_in_the_run / V - kCAFracVolume) / kCAFracVolume
-          * kCAVolumeLoss;
-      static const int BA = 2 * (H * N + N * M + M * H);
-      static const int kCABorderAreaLoss = 10;
-      score -= cnt_border_cells_in_the_run / double(BA) * kCABorderAreaLoss;
+      {
+        auto tmp = -kCADiffLoss * diff;
+        score += tmp;
+        aTotalDiffScore += tmp;
+      }
+      {
+        static const double kCAFracVolume = 0.1;
+        static const int kCAVolumeLoss = 1;
+        auto tmp = -((double)cnt_nonzero_cells_in_the_run / V - kCAFracVolume) / kCAFracVolume
+                  * ((double)cnt_nonzero_cells_in_the_run / V - kCAFracVolume) / kCAFracVolume
+                  * kCAVolumeLoss;
+        score += tmp;
+        aTotalVolumeScore += tmp;
+      }
+      {
+        static const int BA = 2 * (H * N + N * M + M * H);
+        static const int kCABorderAreaLoss = 80;
+        auto tmp = -cnt_border_cells_in_the_run / double(BA) * kCABorderAreaLoss;
+        score += tmp;
+        aTotalBorderScore += tmp;
+      }
       //static const double kCALastLayerEccentricLoss = 0.1, kCALastLayerCentricBonus = 15;
       //int cnt_nonzero_last_layer = 0;
       /*for (int i = 0; i < N; ++i) {
@@ -293,8 +321,12 @@ public:
       score -= ((double)cnt_nonzero_last_layer / A - kCAFracLastArea) * kCAFracLastArea
           * ((double)cnt_nonzero_last_layer / A - kCAFracLastArea) * kCAFracLastArea
           * kCALastAreaLoss;*/
-      const int kCARotatedSubstringsBonus = 1000;
-      score += rotated_substrings_score / double(V) * kCARotatedSubstringsBonus;
+      {
+        static const double kCARotatedSubstringsBonus = 1;
+        auto tmp = rotated_substrings_score / double(H) * kCARotatedSubstringsBonus;
+        score += tmp;
+        aTotalSubstringsScore += tmp;
+      }
     }
     return score - personal_loss() * trials;
   }
@@ -311,7 +343,7 @@ int main() {
   const int kCAGenerationsCnt = 10000000;
   const int kCAGenerationLeave = 2000;
   const int kCAGenerationEligible = 4000;
-  const int kCACreatureAssessment = 30;
+  const int kCACreatureAssessments = 30;
   const int kCALearningTime = 30;
   unsigned int threads_cnt = std::thread::hardware_concurrency();
   //unsigned int threads_cnt = 1;
@@ -322,13 +354,15 @@ int main() {
     std::vector<std::pair<int64_t, int>> scores;
     std::vector<std::jthread> pool;
     std::mutex mutex;
+    aTotalDiffScore = 0, aTotalVolumeScore = 0, aTotalBorderScore = 0, aTotalSubstringsScore = 0;
     for (int thread_id = 0; thread_id < threads_cnt; ++thread_id) {
       pool.emplace_back([&](int thread_i) {
+        aTotalBorderScore += 2;
         for (int i = 0; i < kCAGenerationSize; ++i) {
           if (i % threads_cnt != thread_i) {
             continue;
           }
-          int64_t score = generation[i].score(kCACreatureAssessment, thread_generators[thread_i]);
+          int64_t score = generation[i].score(kCACreatureAssessments, thread_generators[thread_i]);
           mutex.lock();
           scores.emplace_back(score, i);
           mutex.unlock();
@@ -342,11 +376,20 @@ int main() {
     //  std::cout << score << " ";
     //}
     std::cout << "scores: ";
-    for (int i = 0; i < 7; ++i) {
+    for (int i = 0; i < 6; ++i) {
       std::cout << scores[i].first << "," << scores[i].second << "\t";
     }
-    std::cout << "...\n";
-    std::cout << std::accumulate(scores.begin(), scores.end(), 0ll, [](int64_t acc, auto pair) { return acc + pair.first; }) << std::endl;
+    std::cout << "...";
+    for (int i = 3; i > 0; --i) {
+      std::cout << "\t" << scores[kCAGenerationSize-i].first << "," << scores[kCAGenerationSize-i].second;
+    }
+    std::cout << "\n";
+    std::cout << "Total Score: " << std::accumulate(scores.begin(), scores.end(), 0ll, [](int64_t acc, auto pair) { return acc + pair.first; }) << "\n";
+    static const double cnt_assessments = kCAGenerationSize * kCACreatureAssessments;
+    std::cout << "Avg Diff Score (per assessment):\t" << aTotalDiffScore / cnt_assessments << "\n";
+    std::cout << "Avg Volume Score (per assessment):\t" << aTotalVolumeScore / cnt_assessments << "\n";
+    std::cout << "Avg Border Score (per assessment):\t" << aTotalBorderScore / cnt_assessments << "\n";
+    std::cout << "Avg Substrings Score (per assessment):\t" << aTotalSubstringsScore / cnt_assessments << "\n";
     std::cout << "phase sex" << std::endl;
     std::vector<creature> new_generation;
     for (int i = 0; i < kCAGenerationLeave; ++i) {
