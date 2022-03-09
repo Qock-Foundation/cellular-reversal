@@ -11,8 +11,8 @@
 const int kCACntCellTypes = 7;
 //const int N = 5, M = 6, H = 7;
 //const int kCAIOi0 = 2, kCAIOj0 = 1, kCAIOlen = 4;
-const int N = 15, M = 15, H = 49, V = H * N * M, A = N * M;
-const int kCAIOi0 = 7, kCAIOj0 = 5, kCAIOlen = 7;
+const int N = 17, M = 17, H = 49, V = H * N * M, A = N * M;
+const int kCAIOi0 = 7, kCAIOj0 = 6, kCAIOlen = 7;
 
 std::atomic<int64_t> aTotalDiffScore, aTotalVolumeScore, aTotalBorderScore, aTotalSubstringsScore;
 
@@ -51,7 +51,7 @@ void print_spacetime(std::ostream& out, const uint8_t arr[H][N][M]) {
   }*/
   for (int i = 0; i < N; ++i) {
     for (int t = 0; t < H; t += 6) {
-      out << "\t";
+      out << "  ";
       for (int j = 0; j < M; ++j) {
         out << char(arr[t][i][j] == 0 ? '.' : 'A' + (arr[t][i][j] - 1));
       }
@@ -99,11 +99,11 @@ class creature {  // 3D CA
         for (int j = 0; j < M; ++j) {
           for (int offset = 0; offset < kCAIOlen - 1; ++offset) {  // trying to match arr[t][i][j].. against str[offset]..
             int len = 0;
-            for (int u = 0; j + u < M && offset + u < kCAIOlen && arr[t][i][j+u] == str[offset+u]; ++u) {  // matching rightwards
+            /*for (int u = 0; j + u < M && offset + u < kCAIOlen && arr[t][i][j+u] == str[offset+u]; ++u) {  // matching rightwards
               len++;
             }
             direct[len]++;
-            len = 0;
+            len = 0;*/  // we don't reward direct match anymore
             for (int u = 0; i - u >= 0 && offset + u < kCAIOlen && arr[t][i-u][j] == str[offset+u]; ++u) {  // matching upwards
               len++;
             }
@@ -123,9 +123,9 @@ class creature {  // 3D CA
       }
     }
     for (int len = 3; len <= kCAIOlen; ++len) {
-      score += direct[len] <= H * kCAIOlen / len ?
+      /*score += direct[len] <= H * kCAIOlen / len ?
           (len <= 1 ? 0 : len == 2 ? 1 : len == 3 ? 3 : len == 4 ? 6 : len == 5 ? 10 : 20) * std::min(H / 3 * kCAIOlen / len, direct[len])
-          : -direct[len] * direct[len] / H / H * 5;
+          : -direct[len] * direct[len] / H / H * 5;*/
       score += perpendicular[len] <= 1.5 * H * kCAIOlen / len ?
           (len <= 1 ? 0 : len == 2 ? 2 : len == 3 ? 6 : len == 4 ? 15 : len == 5 ? 30 : 50) * std::min(H / 3 * kCAIOlen / len, perpendicular[len])
           : -perpendicular[len] * perpendicular[len] / H / H * 3;
@@ -209,7 +209,7 @@ public:
       x.genes[i] = generator() % 2 ? genes[i] : another.genes[i];
     }
     // and mutations
-    static const double kCAFracMutations = 0.01;
+    static const double kCAFracMutations = 0.003;
     for (int i = 0; i < kCACntGenes; ++i) {
       if (generator() % 100000 < kCAFracMutations * 100000) {
         x.genes[i] = generator() % kCACntCellTypes;
@@ -284,17 +284,18 @@ public:
         aTotalDiffScore += tmp;
       }
       {
-        static const double kCAFracVolume = 0.1;
-        static const int kCAVolumeLoss = 1;
-        auto tmp = -((double)cnt_nonzero_cells_in_the_run / V - kCAFracVolume) / kCAFracVolume
-                  * ((double)cnt_nonzero_cells_in_the_run / V - kCAFracVolume) / kCAFracVolume
-                  * kCAVolumeLoss;
+        static const double kCAFracVolume = 0.06;
+        static const int kCAVolumeLoss = 40;
+        auto tmp = (double)cnt_nonzero_cells_in_the_run / V < kCAFracVolume ? -1000
+            : -(log((double)cnt_nonzero_cells_in_the_run / V) - log(kCAFracVolume))
+            * (log((double)cnt_nonzero_cells_in_the_run / V) - log(kCAFracVolume))
+            * kCAVolumeLoss;
         score += tmp;
         aTotalVolumeScore += tmp;
       }
       {
         static const int BA = 2 * (H * N + N * M + M * H);
-        static const int kCABorderAreaLoss = 80;
+        static const int kCABorderAreaLoss = 300;
         auto tmp = -cnt_border_cells_in_the_run / double(BA) * kCABorderAreaLoss;
         score += tmp;
         aTotalBorderScore += tmp;
