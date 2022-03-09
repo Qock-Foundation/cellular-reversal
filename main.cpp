@@ -303,11 +303,11 @@ int main() {
   unsigned int threads_cnt = std::thread::hardware_concurrency();
   std::mt19937 host_generator, thread_generators[threads_cnt];
   std::vector<creature> generation(kCAGenerationSize, host_generator);
-  for (int T = 0; ++T) {
+  for (int T = 0;; ++T) {
     std::cout << " GENERATION " << T << std::endl;
     std::cout << "phase assessment" << std::endl;
     std::vector<std::pair<int64_t, int>> scores;
-    std::vector<std::jthread> pool;
+    std::vector<std::thread> pool;
     std::mutex mutex;
     aTotalDiffScore = 0, aTotalVolumeScore = 0, aTotalBorderScore = 0, aTotalSubstringsScore = 0;
     for (int thread_id = 0; thread_id < threads_cnt; ++thread_id) {
@@ -324,7 +324,10 @@ int main() {
         }
       }, thread_id);
     }
-    pool.clear();  // execute them all
+    for (auto& j : pool) {
+      j.join();
+    }
+    pool.clear();
     std::sort(scores.begin(), scores.end());
     std::reverse(scores.begin(), scores.end());
     std::cout << "scores: ";
@@ -361,7 +364,10 @@ int main() {
         }
       }, thread_id);
     }
-    pool.clear();  // execute them all
+    for (auto& j : pool) {
+      j.join();
+    }
+    pool.clear();
     for (int thread_id = 0; thread_id < threads_cnt; ++thread_id) {
       std::copy(new_generation_part[thread_id].begin(), new_generation_part[thread_id].end(), std::back_inserter(new_generation));
       new_generation_part[thread_id].clear();
@@ -378,7 +384,9 @@ int main() {
         }
       }, thread_id);
     }
-    pool.clear();  // execute them all
+    for (auto& j : pool) {
+      j.join();
+    }
   }
 }
 
