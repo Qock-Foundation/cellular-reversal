@@ -114,11 +114,11 @@ class creature {  // 3D CA
       /*score += direct[len] <= H * kCAIOlen / len ?
           (len <= 1 ? 0 : len == 2 ? 1 : len == 3 ? 3 : len == 4 ? 6 : len == 5 ? 10 : 20) * std::min(H / 3 * kCAIOlen / len, direct[len])
           : -direct[len] * direct[len] / H / H * 5;*/
-      score += perpendicular[len] <= 1.5 * H * kCAIOlen / len ?
+      score += perpendicular[len] <= 2 * H * kCAIOlen / len ?
           (len <= 1 ? 0 : len == 2 ? 2 : len == 3 ? 6 : len == 4 ? 15 : len == 5 ? 30 : 50) * std::min(H / 3 * kCAIOlen / len, perpendicular[len])
           : -perpendicular[len] * perpendicular[len] / H / H * 3;
-      score += reversed[len] <= 2 * H * kCAIOlen / len ?
-          (len <= 1 ? 0 : len == 2 ? 2 : len == 3 ? 10 : len == 4 ? 35 : len == 5 ? 80 : 200) * std::min(H / 3 * kCAIOlen / len, reversed[len])
+      score += reversed[len] <= 1.5 * H * kCAIOlen / len ?
+          (len <= 1 ? 0 : len == 2 ? 2 : len == 3 ? 6 : len == 4 ? 25 : len == 5 ? 50 : 200) * std::min(H / 3 * kCAIOlen / len, reversed[len])
           : -reversed[len] * reversed[len] / H / H;
     }
     return score;
@@ -156,7 +156,7 @@ public:
         R[i][j] = arr[H-1][i][j];
       }
     }
-    if (rand() % 1000000 == 0) {
+    if (rand() % 100000 == 0) {
       print_spacetime(std::cout, arr);
     }
     int cnt_nonzero_cells = 0;
@@ -238,14 +238,14 @@ public:
         std::swap(t[i], t[kCAIOlen-1-i]);
       }
       int diff = levenstein(s, t);
-      static const int kCADiffLoss = 10;
+      static const int kCADiffLoss = 25;
       {
         auto tmp = -kCADiffLoss * diff;
         score += tmp;
         aTotalDiffScore += tmp;
       }
       {
-        static const double kCAFracVolume = 0.06;
+        static const double kCAFracVolume = 0.08;
         static const int kCAVolumeLoss = 40;
         auto tmp = (double)cnt_nonzero_cells_in_the_run / V < kCAFracVolume ? -1000
             : -(log((double)cnt_nonzero_cells_in_the_run / V) - log(kCAFracVolume))
@@ -256,7 +256,7 @@ public:
       }
       {
         static const int BA = 2 * (H * N + N * M + M * H);
-        static const int kCABorderAreaLoss = 300;
+        static const int kCABorderAreaLoss = 500;
         auto tmp = -cnt_border_cells_in_the_run / double(BA) * kCABorderAreaLoss;
         score += tmp;
         aTotalBorderScore += tmp;
@@ -284,7 +284,7 @@ public:
           * ((double)cnt_nonzero_last_layer / A - kCAFracLastArea) * kCAFracLastArea
           * kCALastAreaLoss;*/
       {
-        static const double kCARotatedSubstringsBonus = 1;
+        static const double kCARotatedSubstringsBonus = 2;
         auto tmp = rotated_substrings_score / double(H) * kCARotatedSubstringsBonus;
         score += tmp;
         aTotalSubstringsScore += tmp;
@@ -296,14 +296,16 @@ public:
 
 int main() {
   const int kCAGenerationSize = 10000;
-  const int kCAGenerationLeave = 2000;
-  const int kCAGenerationEligible = 4000;
-  const int kCACreatureAssessments = 30;
-  const int kCALearningTime = 30;
+  const double kCAFracGenerationLeave = 0.20;
+  const double kCAFracGenerationEligible = 0.40;
+  const int kCACreatureAssessments = 10;
+  const int kCALearningTime = 10;
   unsigned int threads_cnt = std::thread::hardware_concurrency();
   std::mt19937 host_generator, thread_generators[threads_cnt];
   std::vector<creature> generation(kCAGenerationSize, host_generator);
   for (int T = 0;; ++T) {
+    const int kCAGenerationLeave = kCAFracGenerationLeave * kCAGenerationSize;
+    const int kCAGenerationEligible = kCAFracGenerationEligible * kCAGenerationSize;
     std::cout << " GENERATION " << T << std::endl;
     std::cout << "phase assessment" << std::endl;
     std::vector<std::pair<int64_t, int>> scores;
