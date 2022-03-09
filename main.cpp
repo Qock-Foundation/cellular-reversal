@@ -9,8 +9,6 @@
 #include <vector>
 
 const int kCACntCellTypes = 7;
-//const int N = 5, M = 6, H = 7;
-//const int kCAIOi0 = 2, kCAIOj0 = 1, kCAIOlen = 4;
 const int N = 17, M = 17, H = 49, V = H * N * M, A = N * M;
 const int kCAIOi0 = 7, kCAIOj0 = 6, kCAIOlen = 7;
 
@@ -39,16 +37,6 @@ public:
 };
 void print_spacetime(std::ostream& out, const uint8_t arr[H][N][M]) {
   out << "spacetime:\n";
-  /*for (int i = 0; i < N; ++i) {
-    out << "\t";
-    for (int t = 0; t < H; ++t) {
-      for (int j = 0; j < M; ++j) {
-        out << char(arr[t][i][j] == 0 ? '.' : 'A' + (arr[t][i][j] - 1)) << " ";
-      }
-      out << "\t\t";
-    }
-    out << "\n";
-  }*/
   for (int i = 0; i < N; ++i) {
     for (int t = 0; t < H; t += 6) {
       out << "  ";
@@ -141,10 +129,6 @@ public:
       genes[i] = generator() % kCACntCellTypes;
     }
   }
-  /*uint8_t operator()(uint8_t a00, uint8_t a01, uint8_t a02, uint8_t a10, uint8_t a11, uint8_t a12, uint8_t a20, uint8_t a21, uint8_t a22) const {
-    //std::cout << (int)a00 << " " << (int)a01 << " " << (int)a02 << " " << (int)a10 << " " << (int)a11 << " " << (int)a12 << " " << (int)a20 << " " << (int)a21 << " " << (int)a22 << std::endl;
-    return genes[(((((((a00 * 3 + a01) * 3 + a02) * 3 + a10) * 3 + a11) * 3 + a12) * 3 + a20) * 3 + a21) * 3 + a22];
-  }*/
   uint8_t operator()(uint8_t a01, uint8_t a10, uint8_t a11, uint8_t a12, uint8_t a21) {
     return genes[(((a01 * 3 + a10) * 3 + a11) * 3 + a12) * 3 + a21];
   }
@@ -158,11 +142,6 @@ public:
     for (int t = 0; t < H - 1; ++t) {
       for (int i = 0; i < N; ++i) {
         for (int j = 0; j < M; ++j) {
-          /*arr[t+1][i][j] = (*this)(
-              i > 0 && j > 0 ? arr[t][i-1][j-1] : 0, i > 0 ? arr[t][i-1][j] : 0, i > 0 && j < M - 1 ? arr[t][i-1][j+1] : 0,
-              j > 0 ? arr[t][i][j-1] : 0, arr[t][i][j], j < M - 1 ? arr[t][i][j+1] : 0,
-              i < N - 1 && j > 0 ? arr[t][i+1][j-1] : 0, i < N - 1 ? arr[t][i+1][j] : 0, i < N - 1 && j < M - 1 ? arr[t][i+1][j+1] : 0
-          );*/
           arr[t+1][i][j] = (*this)(
               i > 0 ? arr[t][i-1][j] : 0,
               j > 0 ? arr[t][i][j-1] : 0, arr[t][i][j], j < M - 1 ? arr[t][i][j+1] : 0,
@@ -178,7 +157,6 @@ public:
       }
     }
     if (rand() % 1000000 == 0) {
-      //std::cout << F << "to\n" << R << "\n";
       print_spacetime(std::cout, arr);
     }
     int cnt_nonzero_cells = 0;
@@ -200,9 +178,6 @@ public:
     }
     return {R, {cnt_nonzero_cells, {cnt_border_cells, rotated_substrings_presence_heuristics(arr, s)}}};
   }
-  /*auto operator()(const field F) {
-    return run(F);
-  }*/
   creature sex(const creature& another, std::mt19937& generator) {  // another is const
     creature x(generator);
     for (int i = 0; i < kCACntGenes; ++i) {
@@ -236,14 +211,6 @@ public:
   //creature operator&(const creature& another) {
   //  return sex(another);
   //}
-  int64_t personal_loss() {  // like "penalize nonzeros", etc
-    /*int64_t cnt_nonzero_genes = 0;
-    for (int i = 0; i < kCACntGenes; ++i) {
-      cnt_nonzero_genes += genes[i] != 0;
-    }
-    return (cnt_nonzero_genes - kCACntGenes) * (cnt_nonzero_genes - kCACntGenes) / 1000;*/
-    return 0;
-  }
   int64_t score(int trials, std::mt19937& generator) {  // samples situations, estimates the creature
     aTotalDiffScore += 1;
     int64_t score = 0;
@@ -261,18 +228,12 @@ public:
       for (int j = 0; j < kCAIOlen; ++j) {
         F[kCAIOi0][kCAIOj0+j] = s[j];
       }
-      /*for (int j = 0; j < M; ++j) {
-        s[j] = F[kCAIOi0][j];
-      }*/
       auto [G, pair] = run(F, s);
       auto [cnt_nonzero_cells_in_the_run, pair2] = pair;
       auto [cnt_border_cells_in_the_run, rotated_substrings_score] = pair2; 
       for (int j = 0; j < kCAIOlen; ++j) {
         t[j] = G[kCAIOi0][kCAIOj0+j];
       }
-      /*for (int j = 0; j < M; ++j) {
-        t[j] = G[kCAIOi0][j];
-      }*/
       for (int i = 0; i < kCAIOlen / 2; ++i) {
         std::swap(t[i], t[kCAIOlen-1-i]);
       }
@@ -329,28 +290,21 @@ public:
         aTotalSubstringsScore += tmp;
       }
     }
-    return score - personal_loss() * trials;
+    return score;
   }
 };
 
 int main() {
-  /*const int kCAGenerationSize = 100000;
-  const int kCAGenerationsCnt = 10000000;
-  const int kCAGenerationLeave = 20000;
-  const int kCAGenerationEligible = 40000;
-  const int kCACreatureAssessment = 50;
-  const int kCALearningTime = 100;*/
   const int kCAGenerationSize = 10000;
-  const int kCAGenerationsCnt = 10000000;
   const int kCAGenerationLeave = 2000;
   const int kCAGenerationEligible = 4000;
   const int kCACreatureAssessments = 30;
   const int kCALearningTime = 30;
   unsigned int threads_cnt = std::thread::hardware_concurrency();
-  //unsigned int threads_cnt = 1;
   std::mt19937 host_generator, thread_generators[threads_cnt];
   std::vector<creature> generation(kCAGenerationSize, host_generator);
-  for (int T = 0; T < kCAGenerationsCnt; ++T) {
+  for (int T = 0; ++T) {
+    std::cout << " GENERATION " << T << std::endl;
     std::cout << "phase assessment" << std::endl;
     std::vector<std::pair<int64_t, int>> scores;
     std::vector<std::jthread> pool;
@@ -373,9 +327,6 @@ int main() {
     pool.clear();  // execute them all
     std::sort(scores.begin(), scores.end());
     std::reverse(scores.begin(), scores.end());
-    //for (const auto [score, i] : scores) {
-    //  std::cout << score << " ";
-    //}
     std::cout << "scores: ";
     for (int i = 0; i < 6; ++i) {
       std::cout << scores[i].first << "," << scores[i].second << "\t";
