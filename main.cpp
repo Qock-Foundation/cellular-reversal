@@ -9,10 +9,10 @@
 #include <vector>
 
 const int kCACntCellTypes = 7;
-const int N = 17, M = 17, H = 49, V = H * N * M, A = N * M;
-const int kCAIOi0 = 7, kCAIOj0 = 6, kCAIOlen = 7;
+const int N = 21, M = 19, H = 55, V = H * N * M, A = N * M;
+const int kCAIOi0 = 9, kCAIOj0 = 5, kCAIOlen = 9;
 
-std::atomic<int64_t> aTotalDiffScore, aTotalVolumeScore, aTotalBorderScore, aTotalSubstringsScore;
+std::atomic<int64_t> aTotalDiffScore, aTotalVolumeScore, aTotalBorderScore, aTotalSubstringsScore, aTotalAreaDiffScore, aTotalFiberizationScore, aTotalGenesScore;
 
 class field {  // N * M
   uint8_t arr[N][M];
@@ -26,7 +26,7 @@ public:
   friend std::ostream& operator<< (std::ostream& out, const field& f) {
     out << "field:\n";
     for (int i = 0; i < N; ++i) {
-      out << "\t";
+      out << " ";
       for (int j = 0; j < M; ++j) {
         out << char(f[i][j] == 0 ? '.' : 'A' + (f[i][j] - 1)) << " ";
       }
@@ -79,9 +79,9 @@ class creature {  // 3D CA
     }
     return diff;
   }
-  static int rotated_substrings_presence_heuristics(const uint8_t arr[H][N][M], const uint8_t str[kCAIOlen]) {
+  static int rotated_substrings_heuristics(const uint8_t arr[H][N][M], const uint8_t str[kCAIOlen]) {
     int score = 0;
-    int direct[kCAIOlen+1] = {}, perpendicular[kCAIOlen+1] = {}, reversed[kCAIOlen+1] = {};
+    int direct[kCAIOlen+1] = {}, diagonal_easy[kCAIOlen+1] = {}, perpendicular[kCAIOlen+1] = {}, diagonal_hard[kCAIOlen+1] = {}, reversed[kCAIOlen+1] = {};
     for (int t = 0; t < H; ++t) {
       for (int i = 0; i < N; ++i) {
         for (int j = 0; j < M; ++j) {
@@ -106,22 +106,99 @@ class creature {  // 3D CA
               len++;
             }
             reversed[len]++;
+            len = 0;
+            for (int u = 0; i + u < N && j - u >= 0 && offset + u < kCAIOlen && arr[t][i+u][j-u] == str[offset+u]; ++u) {  // matching right-up-wards
+              len++;
+            }
+            diagonal_easy[len]++;
+            len = 0;
+            for (int u = 0; i + u < N && j + u < N && offset + u < kCAIOlen && arr[t][i+u][j+u] == str[offset+u]; ++u) {  // matching right-down-wards
+              len++;
+            }
+            diagonal_easy[len]++;
+            len = 0;
+            for (int u = 0; i - u >= 0 && j - u >= 0 && offset + u < kCAIOlen && arr[t][i-u][j-u] == str[offset+u]; ++u) {  // matching left-up-wards
+              len++;
+            }
+            diagonal_hard[len]++;
+            len = 0;
+            for (int u = 0; i - u >= 0 && j + u < N && offset + u < kCAIOlen && arr[t][i-u][j+u] == str[offset+u]; ++u) {  // matching left-down-wards
+              len++;
+            }
+            diagonal_hard[len]++;
           }
         }
       }
     }
     for (int len = 3; len <= kCAIOlen; ++len) {
       /*score += direct[len] <= H * kCAIOlen / len ?
-          (len <= 1 ? 0 : len == 2 ? 1 : len == 3 ? 3 : len == 4 ? 6 : len == 5 ? 10 : 20) * std::min(H / 3 * kCAIOlen / len, direct[len])
-          : -direct[len] * direct[len] / H / H * 5;*/
+          (len <= 1 ? 0 : len == 2 ? 1 : len == 3 ? 3 : len == 4 ? 6 : len == 5 ? 10 : 20) * std::min(H / 3 * kCAIOlen / len, direct[len]) : -direct[len] * direct[len] / H / H * 5;*/
+      score += diagonal_easy[len] <= 2 * H * kCAIOlen / len ?
+          (len == 3 ? 1 : len == 4 ? 2 : len == 5 ? 4 : len == 6 ? 8 : len == 7 ? 16 : 32) * std::min(H * kCAIOlen / len, diagonal_easy[len]) : 0;
       score += perpendicular[len] <= 2 * H * kCAIOlen / len ?
-          (len <= 1 ? 0 : len == 2 ? 2 : len == 3 ? 6 : len == 4 ? 15 : len == 5 ? 30 : 50) * std::min(H / 3 * kCAIOlen / len, perpendicular[len])
-          : -perpendicular[len] * perpendicular[len] / H / H * 3;
-      score += reversed[len] <= 1.5 * H * kCAIOlen / len ?
-          (len <= 1 ? 0 : len == 2 ? 2 : len == 3 ? 6 : len == 4 ? 25 : len == 5 ? 50 : 200) * std::min(H / 3 * kCAIOlen / len, reversed[len])
-          : -reversed[len] * reversed[len] / H / H;
+          (len == 3 ? 2 : len == 4 ? 4 : len == 5 ? 8 : len == 6 ? 16 : len == 7 ? 32 : 64) * std::min(H * kCAIOlen / len, perpendicular[len]) : 0;  //-perpendicular[len] * perpendicular[len] / H / H * 3;
+      score += diagonal_hard[len] <= 2 * H * kCAIOlen / len ?
+          (len == 3 ? 4 : len == 4 ? 8 : len == 5 ? 16 : len == 6 ? 32 : len == 7 ? 64 : 128) * std::min(H * kCAIOlen / len, diagonal_hard[len]) : 0;
+      score += reversed[len] <= 2 * H * kCAIOlen / len ?
+          (len == 3 ? 8 : len == 4 ? 16 : len == 5 ? 32 : len == 6 ? 64 : len == 7 ? 128 : 256) * std::min(H * kCAIOlen / len, reversed[len]) : 0;  //-reversed[len] * reversed[len] / H / H * 3;
     }
     return score;
+  }
+  static double rms_area_diff(const uint8_t arr[H][N][M]) {
+    int cnt[H] = {};
+    for (int t = 0; t < H; ++t) {
+      for (int i = 0; i < N; ++i) {
+        for (int j = 0; j < M; ++j) {
+          cnt[t] += arr[t][i][j] != 0;
+        }
+      }
+      if (t >= H / 4 && t < 3 * H / 4) {  // kostyl
+        cnt[t] /= 2;
+      }
+    }
+    double avg = 0;
+    for (int t = 0; t < H; ++t) {
+      avg += cnt[t];
+    }
+    avg /= double(H);
+    double rms = 0;
+    for (int t = 0; t < H; ++t) {
+      rms += (cnt[t] - avg) * (cnt[t] - avg);
+    }
+    rms = sqrt(rms / H);
+    return rms;
+  }
+  static int fiberization_score(const uint8_t arr[H][N][M]) {
+    int score = 0;
+    for (int t = 0; t < H; ++t) {
+      for (int i = 0; i < N; ++i) {
+        for (int j = 0; j < M; ++j) {
+          if (arr[t][i][j] == 0) {
+            continue;
+          }
+          bool mask[3][3] = {
+            {i > 0 && j > 0 && arr[t][i-1][j-1], i > 0 && arr[t][i-1][j], i > 0 && j < M - 1 && arr[t][i-1][j+1]},
+            {j > 0 && arr[t][i][j-1], 1, j < M - 1 && arr[t][i][j+1]},
+            {i < N - 1 && j > 0 && arr[t][i+1][j-1], i < N - 1 && arr[t][i+1][j], i < N - 1 && j < M - 1 && arr[t][i+1][j+1]}
+          };
+          static const int bonus[9] = {0, 0, 3, 2, 0, -2, -5, -10, -20};
+          score += bonus[mask[0][0]+mask[0][1]+mask[0][2]+mask[1][0]+mask[1][2]+mask[2][0]+mask[2][1]+mask[2][2]];
+          score += mask[0][0] == 0 && mask[0][1] == 0 && mask[0][2] == 0 && mask[1][0] == 1 && mask[1][2] == 1 && mask[2][0] == 0 && mask[2][1] == 0 && mask[2][2] == 0 ? 3 : 0;
+          score += mask[0][0] == 0 && mask[0][1] == 1 && mask[0][2] == 0 && mask[1][0] == 0 && mask[1][2] == 0 && mask[2][0] == 0 && mask[2][1] == 1 && mask[2][2] == 0 ? 3 : 0;
+        }
+      }
+    }
+    return score;
+  }
+  int personal_loss() {  // like "penalize nonzero genes", etc
+    int64_t cnt_nonzero = 0;
+    for (int i = 0; i < kCACntGenes; ++i) {
+      cnt_nonzero += genes[i] != 0;
+    }
+    // cnt_nonzero should be maybe something like 3 * 3 * 3 * 6, not much bigger
+    if (cnt_nonzero > 2 * 3 * 3 * 3 * 6) {  // 324 of 16807
+      return cnt_nonzero * cnt_nonzero * 10 / (2*3*3*3*6) / (2*3*3*3*6);
+    }
   }
 public:
   creature(std::mt19937& generator) {  // random
@@ -132,8 +209,7 @@ public:
   uint8_t operator()(uint8_t a01, uint8_t a10, uint8_t a11, uint8_t a12, uint8_t a21) {
     return genes[(((a01 * 3 + a10) * 3 + a11) * 3 + a12) * 3 + a21];
   }
-  std::pair<field, std::pair<int, std::pair<int, int>>> run(const field F, const uint8_t s[kCAIOlen]) {  // field, cnt nonzero cells in the run, cnt border cells in the run
-    uint8_t arr[H][N][M];
+  field run(const field F, uint8_t arr[H][N][M]) {  // field, cnt nonzero cells in the run, cnt border cells in the run
     for (int i = 0; i < N; ++i) {
       for (int j = 0; j < M; ++j) {
         arr[0][i][j] = F[i][j];
@@ -159,24 +235,7 @@ public:
     if (rand() % 100000 == 0) {
       print_spacetime(std::cout, arr);
     }
-    int cnt_nonzero_cells = 0;
-    for (int t = 0; t < H; ++t) {
-      for (int i = 0; i < N; ++i) {
-        for (int j = 0; j < M; ++j) {
-          cnt_nonzero_cells += arr[t][i][j] != 0;
-        }
-      }
-    }
-    int cnt_border_cells = 0;  // they are condemned
-    for (int t = 0; t < H; ++t) {
-      for (int i = 0; i < N; ++i) {
-        cnt_border_cells += (arr[t][i][0] != 0) + (arr[t][i][M-1] != 0);
-      }
-      for (int j = 0; j < M; ++j) {
-        cnt_border_cells += (arr[t][0][j] != 0) + (arr[t][N-1][j] != 0);
-      }
-    }
-    return {R, {cnt_nonzero_cells, {cnt_border_cells, rotated_substrings_presence_heuristics(arr, s)}}};
+    return R;
   }
   creature sex(const creature& another, std::mt19937& generator) {  // another is const
     creature x(generator);
@@ -228,36 +287,54 @@ public:
       for (int j = 0; j < kCAIOlen; ++j) {
         F[kCAIOi0][kCAIOj0+j] = s[j];
       }
-      auto [G, pair] = run(F, s);
-      auto [cnt_nonzero_cells_in_the_run, pair2] = pair;
-      auto [cnt_border_cells_in_the_run, rotated_substrings_score] = pair2; 
-      for (int j = 0; j < kCAIOlen; ++j) {
-        t[j] = G[kCAIOi0][kCAIOj0+j];
-      }
-      for (int i = 0; i < kCAIOlen / 2; ++i) {
-        std::swap(t[i], t[kCAIOlen-1-i]);
-      }
-      int diff = levenstein(s, t);
-      static const int kCADiffLoss = 25;
+      assert(kCAIOi0 < N - 1 && kCAIOj0 >= 1 && kCAIOj0 + kCAIOlen < M);
+      F[kCAIOi0+1][kCAIOj0-1] = 4;         // start codon: 'D'
+      F[kCAIOi0+1][kCAIOj0+kCAIOlen] = 5;  // stop codon: 'E'
+      uint8_t spacetime[H][N][M];
+      const field G = run(F, spacetime);
       {
-        auto tmp = -kCADiffLoss * diff;
+        static const int kCADiffLoss = 45;
+        for (int j = 0; j < kCAIOlen; ++j) {
+          t[j] = G[kCAIOi0][kCAIOj0+j];
+        }
+        for (int i = 0; i < kCAIOlen / 2; ++i) {
+          std::swap(t[i], t[kCAIOlen-1-i]);
+        }
+        auto tmp = -kCADiffLoss * levenstein(s, t);
         score += tmp;
         aTotalDiffScore += tmp;
       }
+      int cnt_nonzero_cells = 0;
+      for (int t = 0; t < H; ++t) {
+        for (int i = 0; i < N; ++i) {
+          for (int j = 0; j < M; ++j) {
+            cnt_nonzero_cells += spacetime[t][i][j] != 0;
+          }
+        }
+      }
+      static const double kCAFracVolume = 0.08;
       {
-        static const double kCAFracVolume = 0.08;
         static const int kCAVolumeLoss = 40;
-        auto tmp = (double)cnt_nonzero_cells_in_the_run / V < kCAFracVolume ? -1000
-            : -(log((double)cnt_nonzero_cells_in_the_run / V) - log(kCAFracVolume))
-            * (log((double)cnt_nonzero_cells_in_the_run / V) - log(kCAFracVolume))
+        auto tmp = (double)cnt_nonzero_cells / V < kCAFracVolume ? -1000
+            : -(log((double)cnt_nonzero_cells / V) - log(kCAFracVolume))
+            * (log((double)cnt_nonzero_cells / V) - log(kCAFracVolume))
             * kCAVolumeLoss;
         score += tmp;
         aTotalVolumeScore += tmp;
       }
       {
         static const int BA = 2 * (H * N + N * M + M * H);
-        static const int kCABorderAreaLoss = 500;
-        auto tmp = -cnt_border_cells_in_the_run / double(BA) * kCABorderAreaLoss;
+        static const int kCABorderAreaLoss = 10000;
+        int cnt_border_cells = 0;  // they are condemned
+        for (int t = 0; t < H; ++t) {
+          for (int i = 0; i < N; ++i) {
+            cnt_border_cells += (spacetime[t][i][0] != 0) + (spacetime[t][i][M-1] != 0);
+          }
+          for (int j = 0; j < M; ++j) {
+            cnt_border_cells += (spacetime[t][0][j] != 0) + (spacetime[t][N-1][j] != 0);
+          }
+        }
+        auto tmp = -cnt_border_cells / double(BA) * kCABorderAreaLoss;
         score += tmp;
         aTotalBorderScore += tmp;
       }
@@ -284,10 +361,28 @@ public:
           * ((double)cnt_nonzero_last_layer / A - kCAFracLastArea) * kCAFracLastArea
           * kCALastAreaLoss;*/
       {
-        static const double kCARotatedSubstringsBonus = 2;
-        auto tmp = rotated_substrings_score / double(H) * kCARotatedSubstringsBonus;
+        static const double kCARotatedSubstringsBonus = 10;
+        auto tmp = rotated_substrings_heuristics(spacetime, s) / double(H) * kCARotatedSubstringsBonus;
         score += tmp;
         aTotalSubstringsScore += tmp;
+      }
+      {
+        static const double kCAAreaDiffLoss = 400;
+        auto tmp = -rms_area_diff(spacetime) / (kCAFracVolume * A) * kCAAreaDiffLoss;
+        score += tmp;
+        aTotalAreaDiffScore += tmp;
+      }
+      {
+        static const double kCAFiberizationBonus = 50;
+        auto tmp = fiberization_score(spacetime) / cnt_nonzero_cells * kCAFiberizationBonus;
+        score += tmp;
+        aTotalFiberizationScore += tmp;
+      }
+      {
+        static const double kCAGenesLoss = 1;
+        auto tmp = -personal_loss() * kCAGenesLoss;
+        score += tmp;
+        aTotalGenesScore += tmp;
       }
     }
     return score;
@@ -295,7 +390,7 @@ public:
 };
 
 int main() {
-  const int kCAGenerationSize = 10000;
+  const int kCAGenerationSize = 1000;
   const double kCAFracGenerationLeave = 0.20;
   const double kCAFracGenerationEligible = 0.40;
   const int kCACreatureAssessments = 10;
@@ -311,7 +406,7 @@ int main() {
     std::vector<std::pair<int64_t, int>> scores;
     std::vector<std::thread> pool;
     std::mutex mutex;
-    aTotalDiffScore = 0, aTotalVolumeScore = 0, aTotalBorderScore = 0, aTotalSubstringsScore = 0;
+    aTotalDiffScore = 0, aTotalVolumeScore = 0, aTotalBorderScore = 0, aTotalSubstringsScore = 0, aTotalAreaDiffScore = 0, aTotalFiberizationScore = 0, aTotalGenesScore = 0;
     for (int thread_id = 0; thread_id < threads_cnt; ++thread_id) {
       pool.emplace_back([&](int thread_i) {
         aTotalBorderScore += 2;
@@ -343,10 +438,13 @@ int main() {
     std::cout << "\n";
     std::cout << "Total Score: " << std::accumulate(scores.begin(), scores.end(), 0ll, [](int64_t acc, auto pair) { return acc + pair.first; }) << "\n";
     static const double cnt_assessments = kCAGenerationSize * kCACreatureAssessments;
-    std::cout << "Avg Diff Score (per assessment):\t" << aTotalDiffScore / cnt_assessments << "\n";
-    std::cout << "Avg Volume Score (per assessment):\t" << aTotalVolumeScore / cnt_assessments << "\n";
-    std::cout << "Avg Border Score (per assessment):\t" << aTotalBorderScore / cnt_assessments << "\n";
-    std::cout << "Avg Substrings Score (per assessment):\t" << aTotalSubstringsScore / cnt_assessments << "\n";
+    std::cout << "Avg Diff Score (per assessment):\t\t" << aTotalDiffScore / cnt_assessments << "\n";
+    std::cout << "Avg Volume Score (per assessment):\t\t" << aTotalVolumeScore / cnt_assessments << "\n";
+    std::cout << "Avg Border Score (per assessment):\t\t" << aTotalBorderScore / cnt_assessments << "\n";
+    std::cout << "Avg Substrings Score (per assessment):\t\t" << aTotalSubstringsScore / cnt_assessments << "\n";
+    std::cout << "Avg Area Diff Score (per assessment):\t\t" << aTotalAreaDiffScore / cnt_assessments << "\n";
+    std::cout << "Avg Fiberization Score (per assessment):\t" << aTotalFiberizationScore / cnt_assessments << "\n";
+    std::cout << "Avg Total Genes Score (per assessment):\t" << aTotalGenesScore / cnt_assessments << "\n";
     std::cout << "phase sex" << std::endl;
     std::vector<creature> new_generation;
     for (int i = 0; i < kCAGenerationLeave; ++i) {
