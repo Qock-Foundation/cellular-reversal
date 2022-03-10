@@ -10,7 +10,7 @@
 
 const int kCACntCellTypes = 7;
 const int N = 21, M = 19, H = 55, V = H * N * M, A = N * M;
-const int kCAIOi0 = 5, kCAIOj0 = 5, kCAIOlen = 9;
+const int kCAIOi0 = 4, kCAIOj0 = 5, kCAIOlen = 9;
 
 std::atomic<int64_t> aTotalDiffScore, aTotalVolumeScore, aTotalBorderScore, aTotalSubstringsScore, aTotalTrashScore, aTotalAreaDiffScore, aTotalFiberizationScore, aTotalGenesScore;
 
@@ -51,7 +51,7 @@ void print_spacetime(std::ostream& out, const uint8_t arr[H][N][M]) {
 class creature {  // 3D CA
   static inline const int kCACntGenes = kCACntCellTypes * kCACntCellTypes * kCACntCellTypes
                                       * kCACntCellTypes * kCACntCellTypes;
-  static inline const int kCARecommendedGenesCnt = 3 * 3 * 3 * 6;
+  static inline const int kCARecommendedCntGenes = 3 * 3 * 3 * 6;
   uint8_t genes[kCACntGenes];
   static int min(int a, int b, int c) {
     return std::min(a, std::min(b, c));
@@ -215,21 +215,22 @@ class creature {  // 3D CA
     for (int i = 0; i < kCACntGenes; ++i) {
       cnt_nonzero += genes[i] != 0;
     }
-    if (cnt_nonzero > 2 * kCARecommendedGenesCnt) {  // 324 of 16807
-      return cnt_nonzero * cnt_nonzero / (2 * kCARecommendedGenesCnt) / (2 * kCARecommendedGenesCnt);
+    if (cnt_nonzero > 2 * kCARecommendedCntGenes) {  // 324 of 16807
+      return cnt_nonzero * cnt_nonzero / (2 * kCARecommendedCntGenes) / (2 * kCARecommendedCntGenes);
     }
     return 0;
   }
 public:
   creature(std::mt19937& generator) {  // random, 2x oversampling compared to recommended size
     for (int i = 0; i < kCACntGenes; ++i) {
-      int u = i;
+      /*int u = i;
       bool ok = true;
       while (u > 0) {
         ok &= u % kCACntCellTypes < 4;
         u /= kCACntCellTypes;
       }
-      genes[i] = ok || generator() % kCACntGenes < kCARecommendedGenesCnt ? generator() % kCACntCellTypes : 0;
+      genes[i] = ok || generator() % kCACntGenes < kCARecommendedGenesCnt ? generator() % kCACntCellTypes : 0;*/
+      genes[i] = generator() % kCACntCellTypes;
     }
   }
   uint8_t operator()(uint8_t a01, uint8_t a10, uint8_t a11, uint8_t a12, uint8_t a21) {
@@ -265,14 +266,16 @@ public:
   }
   creature sex(const creature& another, std::mt19937& generator) {  // another is const
     creature x(generator);
+    int cnt_nonzero = 0;
     for (int i = 0; i < kCACntGenes; ++i) {
       x.genes[i] = generator() % 2 ? genes[i] : another.genes[i];
+      cnt_nonzero += x.genes[i] != 0;
     }
     // and mutations
     static const double kCAFracMutations = 0.01;
     for (int i = 0; i < kCACntGenes; ++i) {
       if (generator() % 100000 < kCAFracMutations * 100000) {
-        x.genes[i] = generator() % kCACntCellTypes;
+        x.genes[i] = cnt_nonzero < kCARecommendedCntGenes ? generator() % kCACntCellTypes : 0;
       }
     }
     return x;
@@ -338,7 +341,7 @@ public:
           }
         }
       }
-      static const double kCAFracVolume = 0.08;
+      static const double kCAFracVolume = 0.12;
       {
         static const int kCAVolumeLoss = 50;
         auto tmp = (double)cnt_nonzero_cells / V < kCAFracVolume ? -10000
@@ -350,7 +353,7 @@ public:
       }
       {
         static const int BA = 2 * (H * N + N * M + M * H);
-        static const int kCABorderAreaLoss = 1000;
+        static const int kCABorderAreaLoss = 10000;
         int cnt_border_cells = 0;  // they are condemned
         for (int t = 0; t < H; ++t) {
           for (int i = 0; i < N; ++i) {
@@ -394,6 +397,7 @@ public:
         score += tmp;
         aTotalSubstringsScore += tmp;
         tmp = -score_and_penalty.second / double(H) * kCARotatedTrashLoss;
+        score += tmp;
         aTotalTrashScore += tmp;
       }
       {
@@ -412,7 +416,7 @@ public:
         aTotalFiberizationScore += tmp;
       }
       {
-        static const double kCAGenesLoss = 5;
+        static const double kCAGenesLoss = 1;
         auto tmp = -personal_loss() * kCAGenesLoss;
         score += tmp;
         aTotalGenesScore += tmp;
